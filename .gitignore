@@ -72,3 +72,8 @@ wg1.conf
 
 # Local logs
 *.log
+
+# Saved Terraform plans
+*.tfplan
+tfplan
+
