@@ -36,7 +36,7 @@ ip -n kidpcongg-host link set lo up
 
 # Cho host biết đường tới mạng VPN.
 ip -n kidpcongg-host route add 10.200.0.0/30 via 172.16.10.1
-
+ip -n kidpcongg-host route add 10.10.10.0/24 via 172.16.10.1
 echo "Da tao LAN. Dia chi va route cua host:"
 ip -n kidpcongg-host -4 -br addr
 ip -n kidpcongg-host route

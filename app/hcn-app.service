@@ -1,0 +1,17 @@
+[Unit]
+Description=HCN private demo web server
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/hcn-app
+ExecStart=/usr/bin/python3 -m http.server 8000 --bind 10.10.10.7 --directory /home/ubuntu/hcn-app
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
