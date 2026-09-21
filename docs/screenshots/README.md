@@ -1,213 +1,162 @@
-## Fixing a duplicate IP assignment in the local LAN
+# Screenshot Evidence
 
-![IP correction and successful ping](fix-duplicate-ip-veth-2026-09-10.png)
+This directory contains dated evidence from the Hybrid Cloud Network Lab.
+Screenshots document configuration and validation results; sensitive values
+such as private keys and credentials are not included.
 
-- Date: 2026-09-10
-- Problem: both veth-gw and veth-host were assigned 172.16.10.1/24.
-  Pinging that address inside the namespace reached the namespace itself.
-- Fix: changed veth-host inside kidpcongg-host to 172.16.10.10/24.
-  Kept veth-gw at 172.16.10.1/24.
-- Verification: confirmed the new address and received 4/4 ping replies
-  from 172.16.10.1 across the veth link.
-- Separate finding: the namespace had no route to 8.8.8.8.
-  Internet connectivity has not been configured or verified.
-- Lesson: check interface addresses before treating a successful ping
-  as proof of connectivity between two endpoints.
+## Evidence summary
 
-## AWS account baseline - 2026-09-12
-
-![AWS Free plan initial credit](aws-free-plan-initial-credit-2026-09-12.png)
-
-- Confirmed Free plan status.
-- Remaining credit: USD 100.
-- Remaining Free plan duration: 182 days.
-- These values reflect the account state on the capture date.
-
-
-## AWS budget setup — 2026-09-13
-
-![AWS budget created](aws-budget-created-2026-09-13.png)
-
-- Created hcn-lab-monthly-cost with a recurring monthly budget of USD 10.
-- Configured actual-cost email alerts at 50% and 100%.
-- No automated budget actions were attached.
-- Credit exclusion is pending because charge-type filter data was unavailable.
-- This budget sends alerts; it does not enforce a spending cap.
-
-## AWS network foundation — 2026-09-13
-
-Created the network foundation for the hybrid cloud lab
-in the Singapore region (ap-southeast-1).
-
-The lab VPC uses 10.10.0.0/16.
-
-### Subnets
-
-| Evidence | Configuration and purpose |
-|---|---|
-| [Public subnet](aws-subnet-public-created.png) | Created hcn-public-a with CIDR 10.10.1.0/24 for the VPN gateway. |
-| [Private subnet](aws-subnet-private-created.png) | Created hcn-private-a with CIDR 10.10.10.0/24 for a future application server. |
-
-A subnet's name does not make it public or private.
-Its associated route table determines whether it has
-a direct route to an Internet Gateway.
-
-### Internet Gateway and routing
-
-| Evidence | Configuration and purpose |
-|---|---|
-| [Internet Gateway attached](aws-internet-gateway-attached.png) | Attached hcn-igw to the lab VPC. |
-| [Public route table](aws-public-route-table-created.png) | Created hcn-public-rt to manage routing for the public subnet. |
-| [Default route](aws-public-route-created.png) | Added 0.0.0.0/0 toward hcn-igw for destinations outside the VPC. |
-| [Subnet association](aws-public-subnet-associated.png) | Explicitly associated hcn-public-a with hcn-public-rt. |
-
-The public route table contains:
-
-| Destination | Target | Purpose |
+| Stage | Evidence | What it demonstrates |
 |---|---|---|
-| 10.10.0.0/16 | local | Routing within the VPC. |
-| 0.0.0.0/0 | hcn-igw | Default route toward the internet. |
+| AWS account | [Free plan credit](aws-free-plan-initial-credit-2026-09-12.png) | Account credit observed on the capture date. |
+| Cost control | [AWS budget](aws-budget-created-2026-09-13.png) | Monthly cost alerts were configured. |
+| VPC | [Public subnet](aws-subnet-public-created.png) and [private subnet](aws-subnet-private-created.png) | Separation of the VPN gateway and private workload. |
+| Internet routing | [Internet Gateway](aws-internet-gateway-attached.png), [public route table](aws-public-route-table-created.png), [default route](aws-public-route-created.png), and [subnet association](aws-public-subnet-associated.png) | Public-subnet routing through the Internet Gateway. |
+| Firewall | [VPN security group](aws-vpn-security-group-created.png) | SSH and WireGuard ingress restricted to one administrator IPv4 `/32`. |
+| EC2 access | [Successful SSH login](aws-ec2-ssh-success-2026-09-14.png) | Administrative access to the AWS VPN gateway. |
+| Local networking | [Duplicate-IP correction](fix-duplicate-ip-veth-2026-09-10.png) | Correct addressing across the simulated LAN veth pair. |
+| WireGuard | [Tunnel handshake and ping](wireguard-tunnel-ping-success-2026-09-14.png) | Working encrypted tunnel between the local and AWS gateways. |
+| Routed LAN traffic | [Namespace-to-AWS ping](onprem-host-to-aws-vpn-ping-success-2026-09-14.png) | Traffic from the simulated on-premises host reached AWS. |
+| Packet inspection | [ICMP capture on AWS `wg0`](aws-wg0-host-icmp-capture-2026-09-14.png) | Inner packets retained source `172.16.10.10`; no SNAT was used. |
+| Private workload | [Private application test](onprem-to-private-app-success-2026-09-15.png) | The on-premises namespace reached `10.10.10.7:8000`. |
+| Final validation | [Restart and end-to-end test](hcn-final-end-to-end-2026-09-20.png) | The environment was reconstructed and private connectivity retested successfully. |
 
-Internet access also requires suitable instance addressing
-and firewall rules; the default route alone is not sufficient.
+## 1. Local LAN correction — 2026-09-10
 
-The private subnet uses the main route table, which at this
-stage has only the VPC local route and no internet default route.
+The two ends of the veth pair were initially assigned the same address.
+That made a successful ping misleading because the namespace could reach its
+own address rather than the gateway.
 
-### VPN security group
+Final addressing:
 
-[VPN security group](aws-vpn-security-group-created.png)
+| Node | Interface | Address |
+|---|---|---|
+| Ubuntu on-premises gateway | `veth-gw` | `172.16.10.1/24` |
+| Simulated host namespace | `veth-host` | `172.16.10.10/24` |
 
-Created hcn-vpn-sg for the EC2 VPN gateway.
+After correcting the host address, four ICMP replies from `172.16.10.1`
+verified the veth link. This incident is documented further in
+[Troubleshooting Notes](../troubleshooting.md).
 
-The rules used for the connectivity tests on 2026-09-14 were:
+## 2. AWS cost and network baseline — 2026-09-12 to 2026-09-13
 
-| Direction | Protocol / port | Source or destination | Purpose |
-|---|---|---|---|
-| Inbound | TCP 22 | Current home public IPv4 /32 | SSH administration. |
-| Inbound | UDP 51820 | Current home public IPv4 /32 | WireGuard connectivity. |
-| Outbound | All traffic | 0.0.0.0/0 | Outbound IPv4 traffic for this lab. |
+An AWS Budget named `hcn-lab-monthly-cost` was configured with a USD 10
+monthly threshold and actual-cost email alerts at 50% and 100%. A budget
+sends notifications; it is not a hard spending limit.
 
-The screenshot records the configuration at capture time.
-The inbound source was subsequently updated when the home
-public IPv4 changed.
+The network foundation was created in `ap-southeast-1`:
 
-## EC2 SSH access — 2026-09-14
+| Component | Configuration |
+|---|---|
+| VPC | `10.10.0.0/16` |
+| Public subnet | `10.10.1.0/24` |
+| Private subnet | `10.10.10.0/24` |
+| Public route | `0.0.0.0/0` to the Internet Gateway |
+| Private return route | `172.16.10.0/24` to the VPN gateway ENI |
 
-[Successful SSH login](aws-ec2-ssh-success-2026-09-14.png)
+A subnet becomes public through its effective routing and instance addressing,
+not through its name. The private application has no public IPv4 address.
 
-- Launched hcn-vpn-gw using Ubuntu Server 24.04 LTS
-  and a t3.micro instance in the public subnet.
-- Connected from the Mac using an SSH key and user ubuntu.
-- Verified the remote hostname and private interface address.
-- Resolved an SSH timeout by updating the security group's
-  source /32 to the current home public IPv4.
+The VPN security group allowed TCP 22 and UDP 51820 only from the current
+administrator public IPv4 `/32`. Because that IPv4 can change, the value is
+kept in the ignored `terraform.tfvars` file rather than committed to Git.
 
-This verifies administrative access to the EC2 instance.
-It does not by itself verify VPN connectivity.
+## 3. EC2 and WireGuard — 2026-09-14
 
-## WireGuard tunnel — 2026-09-14
+The AWS VPN gateway runs Ubuntu Server 24.04 on a `t3.micro` instance in the
+public subnet. SSH access was verified using key authentication.
 
-[WireGuard handshake and ping](wireguard-tunnel-ping-success-2026-09-14.png)
-
-Established a WireGuard tunnel between the local Ubuntu VM
-and the AWS EC2 gateway.
+WireGuard addressing:
 
 | Endpoint | Tunnel address |
 |---|---|
-| AWS gateway | 10.200.0.1/30 |
-| Local Ubuntu gateway | 10.200.0.2/30 |
+| AWS VPN gateway | `10.200.0.1/30` |
+| Local Ubuntu gateway | `10.200.0.2/30` |
 
-- AWS listens on UDP 51820.
-- The local peer initiates the connection to the EC2 public IPv4.
-- PersistentKeepalive is set to 25 seconds on the local peer
-  to maintain the NAT mapping.
-- Verified a recent handshake and transfer counters.
-- Tested ping between the tunnel addresses in both directions:
-  each test received 4/4 replies.
+The AWS endpoint listens on UDP 51820. The local peer uses
+`PersistentKeepalive = 25` so a NAT mapping can remain active. A recent
+handshake, increasing transfer counters, and successful ping in both
+directions confirmed tunnel operation.
 
-### Configuration issue resolved
+Private WireGuard keys remain on their respective machines and are excluded
+from the repository.
 
-Loading the private key through PreUp failed because wg0
-did not yet exist on the installed wg-quick version.
+## 4. Routed host traffic and packet capture — 2026-09-14
 
-Changed the hook to PostUp so the private key is loaded
-after interface creation.
+The namespace was configured with routes through `172.16.10.1`, while IPv4
+forwarding was enabled on the local gateway. On AWS, the peer configuration
+included `172.16.10.0/24` in `AllowedIPs`.
 
-Private keys remain on their respective machines and are
-not included in this repository.
+Validation command:
 
-## Simulated LAN host to AWS — 2026-09-14
+```bash
+sudo ip netns exec kidpcongg-host ping -c 4 10.200.0.1
+```
 
-### Local topology
+The result was four transmitted and four received packets. An AWS-side capture:
 
-| Component | Interface | Address |
-|---|---|---|
-| Local Ubuntu gateway | veth-gw | 172.16.10.1/24 |
-| Host in namespace kidpcongg-host | veth-host | 172.16.10.10/24 |
+```bash
+sudo tcpdump -ni wg0 icmp
+```
 
-Configured:
+showed four echo requests and four matching replies between `172.16.10.10`
+and `10.200.0.1`. This capture shows decrypted inner IP traffic on `wg0`, not
+the encrypted outer UDP packets on the internet-facing interface.
 
-- A route in the namespace to 10.200.0.0/30
-  via 172.16.10.1.
-- IPv4 forwarding on the local Ubuntu gateway.
-- The local FORWARD chain had an ACCEPT policy.
-- Added 172.16.10.0/24 to the AWS WireGuard peer's
-  AllowedIPs, providing a return route through wg-quick
-  and authorizing that source range for the peer.
+## 5. Private application — 2026-09-15
 
-### End-to-end ping
+The private EC2 instance uses address `10.10.10.7` and serves a small HTTP
+application on TCP 8000. From the simulated on-premises host:
 
-[Namespace ping to AWS](onprem-host-to-aws-vpn-ping-success-2026-09-14.png)
+```bash
+sudo ip netns exec kidpcongg-host ping -c 4 10.10.10.7
+sudo ip netns exec kidpcongg-host \
+  curl --connect-timeout 5 --max-time 10 http://10.10.10.7:8000/
+```
 
-Ran from the local Ubuntu VM:
+The ping received four replies and the HTTP request returned the application
+page. This is stronger evidence than pinging only the tunnel endpoint: it
+demonstrates routed application traffic between the on-premises LAN and an
+AWS instance that has no public IPv4 address.
 
-    sudo ip netns exec kidpcongg-host ping -c 4 10.200.0.1
+## 6. Final reconstruction test — 2026-09-20
 
-Result: 4 packets transmitted, 4 received, 0% packet loss.
+After restarting the environment:
 
-This verifies connectivity from the simulated LAN host
-through the local gateway and WireGuard to the AWS
-gateway's tunnel address.
+1. The EC2 instances and local UTM VM were started.
+2. The local WireGuard endpoint was updated to the VPN gateway's current
+   public IPv4 address.
+3. `scripts/start-local-lan.sh` recreated the namespace, veth pair, addressing,
+   and routes.
+4. The namespace again received four ping replies from `10.10.10.7`.
+5. The HTTP request again returned the private application page.
 
-### Packet capture on AWS
+This final test verifies that the documented recovery procedure works after
+the ephemeral namespace network has been removed by a VM shutdown.
 
-[ICMP capture on AWS wg0](aws-wg0-host-icmp-capture-2026-09-14.png)
+## 7. Infrastructure as Code and monitoring
 
-Ran on the AWS gateway:
+Terraform now manages the existing AWS network, compute, security, and
+monitoring resources. The import plan completed with:
 
-    sudo tcpdump -ni wg0 icmp
+```text
+11 to import, 0 to add, 0 to change, 0 to destroy
+```
 
-Observed four echo requests and four matching echo replies
-between 172.16.10.10 and 10.200.0.1.
+Terraform then created the explicit private-subnet route-table association.
+The final core infrastructure plan reported no drift. VPC Flow Logs were also
+enabled for `ALL` traffic and delivered successfully to a CloudWatch Logs group
+with seven-day retention.
 
-The original host source address, 172.16.10.10, was preserved.
-No source NAT was required for this tested path.
+Terraform source is available under [`../../infra/terraform/`](../../infra/terraform/).
+State files, saved plans, credentials, real variable files, and private keys
+are intentionally excluded from Git.
 
-This capture shows inner IP traffic on wg0.
-It does not show the encrypted outer UDP packets.
+## Evidence limitations
 
-An earlier ping attempt received no replies. The subsequent
-test succeeded; the cause of that initial failure was not
-established.
-
-## Status and remaining work
-
-As of 2026-09-14:
-
-- Verified EC2 SSH access.
-- Verified the WireGuard tunnel in both directions.
-- Verified simulated LAN host connectivity to the AWS
-  gateway's tunnel address.
-- Saved local IPv4 forwarding configuration in
-  /etc/sysctl.d/99-hcn-forwarding.conf.
-- Enabled local wg-quick@wg0 autostart.
-- Reboot persistence has not yet been tested.
-- The namespace, veth pair and namespace route still need
-  recreation after the local VM reboots.
-- AWS WireGuard autostart has not yet been configured.
-- The EC2 public IPv4 may change after stop/start;
-  the local Endpoint must then be updated.
-- Connectivity to an application in the AWS private subnet
-  has not yet been implemented or tested.
-- Terraform automation and VPC Flow Logs remain future work.
+- Screenshots prove the state observed at the capture time, not continuous
+  availability or production readiness.
+- This is a single-region, single-AZ educational design without redundancy.
+- The EC2 public IPv4 can change after stop/start because no Elastic IP is used.
+- Guest operating-system setup, WireGuard keys, and the application deployment
+  are documented but are not fully automated by Terraform.
