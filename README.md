@@ -4,6 +4,12 @@ A hands-on hybrid networking project that connects a simulated on-premises Linux
 
 **Status:** Core implementation complete and validated end to end.
 
+## Architecture
+
+The lab connects a simulated on-premises Linux network running in UTM on macOS to a private application in an AWS VPC through a WireGuard VPN.
+
+![Hybrid Cloud Network Architecture](docs/architecture.png)
+
 ## Project outcome
 
 This lab demonstrates how a workload without direct cloud access can reach an application in an AWS private subnet through two Linux gateways and an encrypted tunnel. The final validation originated inside the simulated on-premises LAN, traversed WireGuard, reached the private EC2 instance, and returned a successful HTTP response.
