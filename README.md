@@ -28,7 +28,7 @@ Key results:
 - Enabled VPC Flow Logs with CloudWatch Logs delivery.
 - Captured packet, tunnel, routing, SSH, ICMP, and HTTP evidence.
 
-## Architecture
+## Network Topology
 
 ```mermaid
 flowchart LR
